@@ -1,0 +1,3 @@
+[workspace]
+
+members = ["trixel-core", "trixel-desktop"]
