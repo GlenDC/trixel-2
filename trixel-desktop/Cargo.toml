@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 eframe = "0.13"
 egui = "0.13"
 emath = "0.13"
+epaint = "0.13"
 
 serde = { version = "1", features = ["derive"], optional = true }
 

@@ -1,18 +1,18 @@
-use egui::{self, Stroke, Color32, Rect, Pos2, Frame, Ui, Sense};
+use egui::{self, Color32, Frame, Ui, Sense, DragValue};
+use epaint::{Mesh, TextureId, Shape};
 
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "persistence", serde(default))] // if we add new fields, give them default values when deserializing old state
 pub struct Painting {
-    /// in 0-1 normalized coordinates
-    lines: Vec<Vec<Pos2>>,
-    stroke: Stroke,
+    size: f32,
+    color: Color32,
 }
 
 impl Default for Painting {
     fn default() -> Self {
         Self {
-            lines: Default::default(),
-            stroke: Stroke::new(1.0, Color32::LIGHT_BLUE),
+            size: 1.0,
+            color: Color32::LIGHT_BLUE,
         }
     }
 }
@@ -20,11 +20,9 @@ impl Default for Painting {
 impl Painting {
     pub fn ui_control(&mut self, ui: &mut egui::Ui) -> egui::Response {
         ui.horizontal(|ui| {
-            egui::stroke_ui(ui, &mut self.stroke, "Stroke");
-            ui.separator();
-            if ui.button("Clear Painting").clicked() {
-                self.lines.clear();
-            }
+            ui.add(DragValue::new(&mut self.size).speed(0.1).clamp_range(0.1..=5.0))
+                .on_hover_text("Size");
+            ui.color_edit_button_srgba(&mut self.color);
         })
         .response
     }
@@ -33,44 +31,26 @@ impl Painting {
         let (mut response, painter) =
             ui.allocate_painter(ui.available_size_before_wrap_finite(), Sense::drag());
 
-        let to_screen = emath::RectTransform::from_to(
-            Rect::from_min_size(Pos2::ZERO, response.rect.square_proportions()),
-            response.rect,
-        );
-        let from_screen = to_screen.inverse();
-
-        if self.lines.is_empty() {
-            self.lines.push(vec![]);
-        }
-
-        let current_line = self.lines.last_mut().unwrap();
-
-        if let Some(pointer_pos) = response.interact_pointer_pos() {
-            let canvas_pos = from_screen * pointer_pos;
-            if current_line.last() != Some(&canvas_pos) {
-                current_line.push(canvas_pos);
-                response.mark_changed();
-            }
-        } else if !current_line.is_empty() {
-            self.lines.push(vec![]);
-            response.mark_changed();
-        }
-
         let mut shapes = vec![];
-        for line in &self.lines {
-            if line.len() >= 2 {
-                let points: Vec<Pos2> = line.iter().map(|p| to_screen * *p).collect();
-                shapes.push(egui::Shape::line(points, self.stroke));
-            }
-        }
+
+        let mut mesh = Mesh::with_texture(TextureId::Egui);
+        mesh.add_triangle(0, 1, 2);
+        let center = response.rect.center();
+        let offset_x = response.rect.width() / 4.0 * self.size;
+        let offset_y = response.rect.height() / 4.0 * self.size;
+        mesh.colored_vertex(egui::pos2(center.x, center.y + offset_y), self.color);
+        mesh.colored_vertex(egui::pos2(center.x - offset_x, center.y - offset_y), self.color);
+        mesh.colored_vertex(egui::pos2(center.x + offset_x, center.y - offset_y), self.color);
+        shapes.push(Shape::Mesh(mesh));
+
         painter.extend(shapes);
 
+        response.mark_changed();
         response
     }
 
     pub fn draw(&mut self, ui: &mut Ui) {
         self.ui_control(ui);
-        ui.label("Paint with your mouse/touch!");
         Frame::dark_canvas(ui.style()).show(ui, |ui| {
             self.ui_content(ui);
         });
